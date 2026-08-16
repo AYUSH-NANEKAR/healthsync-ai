@@ -1,20 +1,44 @@
 """
 HealthSync AI - SQLite Database Schema
 
-Contains the SQL schema used to initialize the HealthSync AI database.
+Central database schema for:
 
-Database:
-    healthsync.db
+    - User authentication
+    - Persistent login sessions
+    - Health profiles
+    - BLE/IoT devices
+    - Health vitals
+    - Activity data
+    - Device telemetry
+    - Location history
+    - Emergency contacts
+    - AI reports
+    - Health reports
 
-Important:
-    - User data is isolated using user_id.
-    - Passwords are stored as hashes, never plaintext.
-    - Foreign keys are enabled by the database layer.
-    - Schema creation must never delete existing user data.
+IMPORTANT:
+    Sensor values are NOT hardcoded here.
+
+This file only defines the database structure.
+
+Actual values will come from:
+    BLE Simulator (temporary)
+        OR
+    Future ESP32 + real sensors
 """
 
+# ============================================================
+# DATABASE VERSION
+# ============================================================
+
+SCHEMA_VERSION = 2
+
+
+# ============================================================
+# COMPLETE DATABASE SCHEMA
+# ============================================================
 
 SCHEMA_SQL = """
+
 PRAGMA foreign_keys = ON;
 
 
@@ -48,7 +72,38 @@ ON users(email);
 
 
 -- ============================================================
--- HEALTH PROFILES
+-- PERSISTENT LOGIN SESSIONS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    user_id INTEGER NOT NULL,
+
+    session_token TEXT NOT NULL UNIQUE,
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    expires_at TEXT,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id
+ON sessions(user_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_sessions_token
+ON sessions(session_token);
+
+
+-- ============================================================
+-- HEALTH PROFILE
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS health_profiles (
@@ -83,7 +138,50 @@ ON health_profiles(user_id);
 
 
 -- ============================================================
--- VITALS
+-- DEVICES
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    user_id INTEGER NOT NULL,
+
+    device_name TEXT NOT NULL,
+
+    device_address TEXT,
+
+    device_type TEXT,
+
+    connection_type TEXT DEFAULT 'BLE',
+
+    status TEXT NOT NULL DEFAULT 'Disconnected',
+
+    last_seen TEXT,
+
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_devices_user_id
+ON devices(user_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_devices_address
+ON devices(device_address);
+
+
+-- ============================================================
+-- HEALTH VITALS
+--
+-- BLE:
+--   Heart Rate
+--   SpO2
+--   Temperature
+--   Blood Pressure
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS vitals (
@@ -99,9 +197,9 @@ CREATE TABLE IF NOT EXISTS vitals (
 
     temperature REAL,
 
-    steps INTEGER,
+    systolic_pressure REAL,
 
-    movement TEXT,
+    diastolic_pressure REAL,
 
     recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -130,40 +228,155 @@ ON vitals(user_id, recorded_at);
 
 
 -- ============================================================
--- DEVICES
+-- ACTIVITY DATA
+--
+-- BLE:
+--   Movement
+--   Steps
+--   Distance
+--   Calories
+--   Active Time
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS devices (
+CREATE TABLE IF NOT EXISTS activity_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     user_id INTEGER NOT NULL,
 
-    device_name TEXT NOT NULL,
+    device_id INTEGER,
 
-    device_address TEXT,
+    movement TEXT,
 
-    device_type TEXT,
+    steps INTEGER,
 
-    connection_type TEXT,
+    distance_km REAL,
 
-    status TEXT NOT NULL DEFAULT 'Disconnected',
+    calories_kcal REAL,
 
-    last_seen TEXT,
+    active_seconds INTEGER,
 
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    source TEXT,
 
     FOREIGN KEY (user_id)
         REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (device_id)
+        REFERENCES devices(id)
+        ON DELETE SET NULL
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_activity_user_id
+ON activity_data(user_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_activity_recorded_at
+ON activity_data(recorded_at);
+
+
+CREATE INDEX IF NOT EXISTS idx_activity_user_recorded
+ON activity_data(user_id, recorded_at);
+
+
+-- ============================================================
+-- DEVICE TELEMETRY
+--
+-- BLE:
+--   Battery
+--
+-- This is kept separate from health measurements because
+-- battery is a property of the device, not the user.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS device_telemetry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    user_id INTEGER NOT NULL,
+
+    device_id INTEGER NOT NULL,
+
+    battery_percent REAL,
+
+    recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    source TEXT,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (device_id)
+        REFERENCES devices(id)
         ON DELETE CASCADE
 );
 
 
-CREATE INDEX IF NOT EXISTS idx_devices_user_id
-ON devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_telemetry_user_id
+ON device_telemetry(user_id);
 
 
-CREATE INDEX IF NOT EXISTS idx_devices_address
-ON devices(device_address);
+CREATE INDEX IF NOT EXISTS idx_telemetry_device_id
+ON device_telemetry(device_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_recorded_at
+ON device_telemetry(recorded_at);
+
+
+-- ============================================================
+-- LOCATION HISTORY
+--
+-- BLE simulator currently provides a location value.
+--
+-- The future ESP32 may provide GPS coordinates if GPS hardware
+-- is available.
+--
+-- The desktop application can also obtain location independently
+-- through its Location Service.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS location_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    user_id INTEGER NOT NULL,
+
+    device_id INTEGER,
+
+    latitude REAL,
+
+    longitude REAL,
+
+    readable_location TEXT,
+
+    accuracy_meters REAL,
+
+    source TEXT,
+
+    recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (device_id)
+        REFERENCES devices(id)
+        ON DELETE SET NULL
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_location_user_id
+ON location_history(user_id);
+
+
+CREATE INDEX IF NOT EXISTS idx_location_recorded_at
+ON location_history(recorded_at);
+
+
+CREATE INDEX IF NOT EXISTS idx_location_user_recorded
+ON location_history(user_id, recorded_at);
 
 
 -- ============================================================
@@ -260,7 +473,7 @@ ON health_reports(user_id);
 
 
 -- ============================================================
--- DATABASE VERSION
+-- SCHEMA VERSION
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -269,11 +482,14 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 
 INSERT INTO schema_version (version)
-SELECT 1
+SELECT 2
 WHERE NOT EXISTS (
     SELECT 1 FROM schema_version
 );
+
+
+-- ============================================================
+-- END OF SCHEMA
+-- ============================================================
+
 """
-
-
-SCHEMA_VERSION = 1

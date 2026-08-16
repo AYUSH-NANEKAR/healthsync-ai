@@ -1,0 +1,81 @@
+# ==============================
+# HealthSync AI - Git Ignore
+# ==============================
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python build/package files
+build/
+dist/
+*.egg-info/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test/cache files
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local database
+# Do NOT push real user health data to GitHub.
+healthsync.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Local generated files
+generated/
+temp/
+tmp/
+
+# Local AI/model files
+models/
+*.gguf
+*.bin
+*.safetensors
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Local Bluetooth/device configuration
+ble_config.local.*
+device_config.local.*
+
+# Application-specific private data
+private_data/
+user_data/

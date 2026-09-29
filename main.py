@@ -1,14 +1,9 @@
+
 import sys
 
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication
 
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("HealthSync AI")
-        self.resize(1280, 800)
+from app.ui.main_window import MainWindow
 
 
 def main():
@@ -17,8 +12,9 @@ def main():
     window = MainWindow()
     window.show()
 
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+

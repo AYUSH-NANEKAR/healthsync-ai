@@ -1,6 +1,5 @@
 from importlib import import_module
-
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -15,6 +14,8 @@ from PySide6.QtWidgets import (
 
 
 class MainWindow(QMainWindow):
+    logout_requested = Signal()
+
     PAGE_DEFINITIONS = {
         0: ("Dashboard", "app.ui.dashboard", "DashboardPage"),
         1: ("My Health", "app.ui.my_health", "MyHealthPage"),
@@ -106,6 +107,18 @@ class MainWindow(QMainWindow):
             layout.addWidget(button)
 
         layout.addStretch()
+
+        logout_button = QPushButton("Logout")
+        logout_button.setObjectName("logout_button")
+        logout_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        logout_button.clicked.connect(
+            self.logout_requested.emit
+        )
+
+        layout.addWidget(logout_button)
 
         version = QLabel("HealthSync AI - Phase 1")
         version.setObjectName("version_label")
@@ -258,6 +271,20 @@ class MainWindow(QMainWindow):
                 background-color: #00A9A5;
                 color: #FFFFFF;
                 font-weight: 600;
+            }
+
+                        #logout_button {
+                background-color: transparent;
+                color: #90C2E7;
+                border: 1px solid #29465A;
+                border-radius: 10px;
+                padding: 10px 14px;
+                text-align: left;
+            }
+
+            #logout_button:hover {
+                background-color: #0B1D2A;
+                color: #FFFFFF;
             }
 
             #version_label {

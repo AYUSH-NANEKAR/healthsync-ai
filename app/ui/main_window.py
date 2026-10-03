@@ -1,4 +1,5 @@
 from importlib import import_module
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
@@ -30,24 +31,48 @@ class MainWindow(QMainWindow):
         ),
     }
 
-    def __init__(self):
+    # Dashboard/navigation page names -> page indexes
+    NAVIGATION_MAP = {
+        "dashboard": 0,
+        "my_health": 1,
+        "devices": 2,
+        "ai_analysis": 3,
+        "emergency": 4,
+        "hospitals": 5,
+        "outbreak_analysis": 6,
+    }
+
+    def __init__(self, user_id: int, ble_service=None):
         super().__init__()
+
+        # ---------------------------------------------------------
+        # Authenticated user context
+        # ---------------------------------------------------------
+        # Every user-specific page should receive this ID.
+        # This prevents health/device/emergency data from being
+        # accidentally shared between different accounts.
+        self.user_id = user_id
+
+        # Shared BLE service created by main.py.
+        self.ble_service = ble_service
 
         self.setWindowTitle("HealthSync AI")
         self.setMinimumSize(1100, 700)
         self.resize(1280, 800)
 
+        # Navigation/page state
         self.navigation_buttons = []
         self.loaded_pages = {}
 
         self.setup_ui()
         self.apply_styles()
 
+        # Load Dashboard first.
         self.show_page(0)
 
-    # ---------------------------------------------------------
-    # Main UI
-    # ---------------------------------------------------------
+    # =========================================================
+    # MAIN UI
+    # =========================================================
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -63,9 +88,9 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(sidebar)
         main_layout.addWidget(content_area, 1)
 
-    # ---------------------------------------------------------
-    # Sidebar
-    # ---------------------------------------------------------
+    # =========================================================
+    # SIDEBAR
+    # =========================================================
 
     def create_sidebar(self):
         sidebar = QFrame()
@@ -91,7 +116,9 @@ class MainWindow(QMainWindow):
 
             button = QPushButton(page_name)
             button.setObjectName("nav_button")
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
 
             button.setSizePolicy(
                 QSizePolicy.Policy.Expanding,
@@ -127,9 +154,9 @@ class MainWindow(QMainWindow):
 
         return sidebar
 
-    # ---------------------------------------------------------
-    # Content Area
-    # ---------------------------------------------------------
+    # =========================================================
+    # CONTENT AREA
+    # =========================================================
 
     def create_content_area(self):
         content = QWidget()
@@ -167,64 +194,213 @@ class MainWindow(QMainWindow):
 
         return header
 
-    # ---------------------------------------------------------
-    # Page Loading
-    # ---------------------------------------------------------
+    # =========================================================
+    # PAGE LOADING
+    # =========================================================
 
     def load_page(self, index):
+        """
+        Load a page only once.
+
+        User-specific pages receive the authenticated user_id.
+
+        Current page responsibilities:
+        - Dashboard -> user_id + BLE service
+        - My Health -> user_id
+        - Devices -> user_id + BLE service
+        - Other pages -> existing constructors
+
+        Pages are cached after their first creation so that
+        navigation does not unnecessarily recreate them.
+        """
+
         if index in self.loaded_pages:
             return self.loaded_pages[index]
 
         if index not in self.PAGE_DEFINITIONS:
-            raise ValueError(f"Invalid page index: {index}")
+            raise ValueError(
+                f"Invalid page index: {index}"
+            )
 
-        _, module_name, class_name = self.PAGE_DEFINITIONS[index]
+        _, module_name, class_name = (
+            self.PAGE_DEFINITIONS[index]
+        )
 
         module = import_module(module_name)
-        page_class = getattr(module, class_name)
 
-        page = page_class()
+        page_class = getattr(
+            module,
+            class_name,
+        )
+
+        # -----------------------------------------------------
+        # Dashboard
+        # -----------------------------------------------------
+
+        if index == 0:
+
+            page = page_class(
+                user_id=self.user_id
+            )
+
+            if self.ble_service is not None:
+                if hasattr(
+                    page,
+                    "set_ble_service",
+                ):
+                    page.set_ble_service(
+                        self.ble_service
+                    )
+
+            if hasattr(
+                page,
+                "navigation_requested",
+            ):
+                page.navigation_requested.connect(
+                    self.handle_page_navigation
+                )
+
+        # -----------------------------------------------------
+        # My Health
+        # -----------------------------------------------------
+
+        elif index == 1:
+
+            # MyHealthPage is user-specific.
+            #
+            # The page uses this authenticated user_id to:
+            # - load the correct health profile
+            # - save the correct health profile
+            # - prevent one user's health data from being
+            #   displayed for another logged-in user
+            page = page_class(
+                user_id=self.user_id
+            )
+
+        # -----------------------------------------------------
+        # Devices
+        # -----------------------------------------------------
+
+        elif index == 2:
+
+            page = page_class(
+                user_id=self.user_id
+            )
+
+            if self.ble_service is not None:
+                if hasattr(
+                    page,
+                    "set_ble_service",
+                ):
+                    page.set_ble_service(
+                        self.ble_service
+                    )
+
+        # -----------------------------------------------------
+        # Other pages
+        # -----------------------------------------------------
+
+        else:
+
+            page = page_class()
+
+        # -----------------------------------------------------
+        # Cache and register page
+        # -----------------------------------------------------
 
         self.loaded_pages[index] = page
+
         self.pages.addWidget(page)
 
         return page
 
-    # ---------------------------------------------------------
-    # Navigation
-    # ---------------------------------------------------------
+    # =========================================================
+    # DASHBOARD -> MAIN NAVIGATION
+    # =========================================================
+
+    def handle_page_navigation(
+        self,
+        page_name: str,
+    ):
+        """
+        Handle navigation requests emitted by Dashboard.
+        """
+
+        if not page_name:
+            return
+
+        page_key = str(
+            page_name
+        ).strip().lower()
+
+        page_index = self.NAVIGATION_MAP.get(
+            page_key
+        )
+
+        if page_index is None:
+            print(
+                f"[NAVIGATION] Unknown page: "
+                f"{page_name}"
+            )
+            return
+
+        self.show_page(
+            page_index
+        )
+
+    # =========================================================
+    # NAVIGATION
+    # =========================================================
 
     def show_page(self, index):
         try:
-            page = self.load_page(index)
 
-            self.pages.setCurrentWidget(page)
+            page = self.load_page(
+                index
+            )
+
+            self.pages.setCurrentWidget(
+                page
+            )
 
             for button_index, button in enumerate(
                 self.navigation_buttons
             ):
+
                 button.setProperty(
                     "active",
                     button_index == index,
                 )
 
-                button.style().unpolish(button)
-                button.style().polish(button)
+                button.style().unpolish(
+                    button
+                )
 
-            self.system_status.setText("System Ready")
+                button.style().polish(
+                    button
+                )
+
+            self.system_status.setText(
+                "System Ready"
+            )
 
         except Exception as error:
-            self.system_status.setText("Page Load Error")
+
+            self.system_status.setText(
+                "Page Load Error"
+            )
+
             print(
                 f"Failed to load page {index}: "
                 f"{type(error).__name__}: {error}"
             )
 
-    # ---------------------------------------------------------
-    # Styling
-    # ---------------------------------------------------------
+    # =========================================================
+    # STYLING
+    # =========================================================
 
     def apply_styles(self):
+
         self.setStyleSheet(
             """
             QMainWindow {
@@ -273,7 +449,7 @@ class MainWindow(QMainWindow):
                 font-weight: 600;
             }
 
-                        #logout_button {
+            #logout_button {
                 background-color: transparent;
                 color: #90C2E7;
                 border: 1px solid #29465A;
@@ -322,4 +498,3 @@ class MainWindow(QMainWindow):
             }
             """
         )
-

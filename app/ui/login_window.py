@@ -22,10 +22,10 @@ class LoginWindow(QWidget):
     # Sends the authenticated user's information.
     login_successful = Signal(dict)
 
-    def __init__(self):
+    def __init__(self, auth_manager: AuthManager):
         super().__init__()
 
-        self.auth_manager = AuthManager()
+        self.auth_manager = auth_manager
         self.authenticated_user = None
 
         # Keep the registration window alive.

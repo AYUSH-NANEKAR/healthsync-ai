@@ -43,7 +43,9 @@ class ApplicationController:
         Show the login window.
         """
 
-        self.login_window = LoginWindow()
+        self.login_window = LoginWindow(
+            auth_manager=self.auth_manager
+        )
 
         self.login_window.login_successful.connect(
             self.handle_login_success

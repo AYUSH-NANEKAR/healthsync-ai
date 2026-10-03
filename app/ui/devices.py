@@ -16,59 +16,52 @@ from app.database.connection import get_connection
 
 
 class DevicesPage(QWidget):
-    """
-    Devices management page.
-
-    Responsibilities:
-    - Display the currently connected device.
-    - Display nearby BLE devices.
-    - Start BLE scans.
-    - Request connection to a selected BLE device.
-    - Display saved devices from SQLite.
-    - Display latest battery information.
-
-    BLE communication is handled by BLEIntegrationService.
-    """
 
     def __init__(self, user_id: int):
         super().__init__()
 
         self.user_id = user_id
+
+        # BLE integration service is injected by the main application.
         self.ble_service = None
+
+        # Database device ID of the currently connected device.
         self.current_device_id = None
+
+        # Address currently being connected/reconnected.
+        self.current_device_address = None
+
+        # Used only for UI state.
+        self.telemetry_received_at = None
+        self.is_scanning = False
+        self.is_connecting = False
 
         self.build_ui()
         self.load_devices()
 
-    # ============================================================
+    # ========================================================
     # UI
-    # ============================================================
+    # ========================================================
 
     def build_ui(self):
         root_layout = QVBoxLayout(self)
 
-        root_layout.setContentsMargins(
-            0,
-            0,
-            0,
-            0,
-        )
-
+        root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
         scroll_area = QScrollArea()
-
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
         scroll_area.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+
         scroll_area.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
 
         content = QWidget()
-
         content_layout = QVBoxLayout(content)
 
         content_layout.setContentsMargins(
@@ -80,9 +73,9 @@ class DevicesPage(QWidget):
 
         content_layout.setSpacing(22)
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Page heading
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         heading_layout = QVBoxLayout()
         heading_layout.setSpacing(5)
@@ -95,28 +88,24 @@ class DevicesPage(QWidget):
             "that provide health data to HealthSync AI."
         )
 
-        description.setObjectName(
-            "page_description"
-        )
+        description.setObjectName("page_description")
 
         heading_layout.addWidget(title)
         heading_layout.addWidget(description)
 
-        content_layout.addLayout(
-            heading_layout
-        )
+        content_layout.addLayout(heading_layout)
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Connected device
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         content_layout.addWidget(
             self.create_connected_card()
         )
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Nearby devices header
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         nearby_header = QHBoxLayout()
 
@@ -127,9 +116,7 @@ class DevicesPage(QWidget):
             "Nearby Bluetooth Devices"
         )
 
-        nearby_title.setObjectName(
-            "section_title"
-        )
+        nearby_title.setObjectName("section_title")
 
         nearby_description = QLabel(
             "Devices currently visible through Bluetooth Low Energy."
@@ -180,9 +167,9 @@ class DevicesPage(QWidget):
             nearby_header
         )
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Scan status
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         scan_status_container = QFrame()
 
@@ -229,34 +216,26 @@ class DevicesPage(QWidget):
             scan_status_container
         )
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Nearby device list
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         self.nearby_devices_container = QVBoxLayout()
-
-        self.nearby_devices_container.setSpacing(
-            10
-        )
+        self.nearby_devices_container.setSpacing(10)
 
         content_layout.addLayout(
             self.nearby_devices_container
         )
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Saved devices
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         saved_header = QVBoxLayout()
         saved_header.setSpacing(3)
 
-        saved_title = QLabel(
-            "Saved Devices"
-        )
-
-        saved_title.setObjectName(
-            "section_title"
-        )
+        saved_title = QLabel("Saved Devices")
+        saved_title.setObjectName("section_title")
 
         saved_description = QLabel(
             "Devices previously registered with your HealthSync account."
@@ -266,23 +245,13 @@ class DevicesPage(QWidget):
             "section_description"
         )
 
-        saved_header.addWidget(
-            saved_title
-        )
+        saved_header.addWidget(saved_title)
+        saved_header.addWidget(saved_description)
 
-        saved_header.addWidget(
-            saved_description
-        )
-
-        content_layout.addLayout(
-            saved_header
-        )
+        content_layout.addLayout(saved_header)
 
         self.saved_devices_container = QVBoxLayout()
-
-        self.saved_devices_container.setSpacing(
-            10
-        )
+        self.saved_devices_container.setSpacing(10)
 
         content_layout.addLayout(
             self.saved_devices_container
@@ -290,22 +259,20 @@ class DevicesPage(QWidget):
 
         content_layout.addStretch()
 
-        scroll_area.setWidget(
-            content
-        )
+        scroll_area.setWidget(content)
 
-        root_layout.addWidget(
-            scroll_area
-        )
+        root_layout.addWidget(scroll_area)
 
         self.apply_page_styles()
+
+    # ========================================================
+    # CONNECTED DEVICE CARD
+    # ========================================================
 
     def create_connected_card(self):
         card = QFrame()
 
-        card.setObjectName(
-            "connected_card"
-        )
+        card.setObjectName("connected_card")
 
         card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -323,22 +290,16 @@ class DevicesPage(QWidget):
 
         layout.setSpacing(18)
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Card header
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         header = QHBoxLayout()
 
-        label = QLabel(
-            "CONNECTED DEVICE"
-        )
-
-        label.setObjectName(
-            "card_overline"
-        )
+        label = QLabel("CONNECTED DEVICE")
+        label.setObjectName("card_overline")
 
         header.addWidget(label)
-
         header.addStretch()
 
         self.connection_status = QLabel(
@@ -355,12 +316,11 @@ class DevicesPage(QWidget):
 
         layout.addLayout(header)
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Device identity
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         identity = QHBoxLayout()
-
         identity.setSpacing(20)
 
         identity_text = QVBoxLayout()
@@ -390,20 +350,16 @@ class DevicesPage(QWidget):
             self.device_type
         )
 
-        identity.addLayout(
-            identity_text
-        )
-
+        identity.addLayout(identity_text)
         identity.addStretch()
 
         layout.addLayout(identity)
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Device statistics
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         statistics = QHBoxLayout()
-
         statistics.setSpacing(12)
 
         self.battery_value = self.create_stat_card(
@@ -414,7 +370,7 @@ class DevicesPage(QWidget):
 
         self.updated_value = self.create_stat_card(
             statistics,
-            "LAST UPDATED",
+            "LAST TELEMETRY",
             "--",
         )
 
@@ -424,13 +380,11 @@ class DevicesPage(QWidget):
             "Bluetooth LE",
         )
 
-        layout.addLayout(
-            statistics
-        )
+        layout.addLayout(statistics)
 
-        # --------------------------------------------------------
+        # ----------------------------------------------------
         # Metadata
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         metadata = QHBoxLayout()
 
@@ -451,16 +405,72 @@ class DevicesPage(QWidget):
 
         metadata.addStretch()
 
-        layout.addLayout(
-            metadata
+        layout.addLayout(metadata)
+
+        # ----------------------------------------------------
+        # Telemetry status
+        # ----------------------------------------------------
+
+        telemetry_card = QFrame()
+
+        telemetry_card.setObjectName(
+            "telemetry_status_card"
         )
 
-        # --------------------------------------------------------
+        telemetry_layout = QVBoxLayout(
+            telemetry_card
+        )
+
+        telemetry_layout.setContentsMargins(
+            14,
+            12,
+            14,
+            12,
+        )
+
+        telemetry_layout.setSpacing(4)
+
+        telemetry_heading = QLabel("TELEMETRY")
+        telemetry_heading.setObjectName(
+            "telemetry_heading"
+        )
+
+        self.telemetry_status = QLabel(
+            "○  WAITING FOR DATA"
+        )
+
+        self.telemetry_status.setObjectName(
+            "telemetry_waiting"
+        )
+
+        self.telemetry_detail = QLabel(
+            "Connect a HealthSync-compatible device "
+            "to receive telemetry."
+        )
+
+        self.telemetry_detail.setObjectName(
+            "telemetry_detail"
+        )
+
+        telemetry_layout.addWidget(
+            telemetry_heading
+        )
+
+        telemetry_layout.addWidget(
+            self.telemetry_status
+        )
+
+        telemetry_layout.addWidget(
+            self.telemetry_detail
+        )
+
+        layout.addWidget(telemetry_card)
+
+        # ----------------------------------------------------
         # Actions
-        # --------------------------------------------------------
+        # ----------------------------------------------------
 
         actions = QHBoxLayout()
-
         actions.addStretch()
 
         self.disconnect_button = QPushButton(
@@ -471,21 +481,14 @@ class DevicesPage(QWidget):
             "danger_button"
         )
 
-        self.disconnect_button.setMinimumHeight(
-            40
-        )
-
-        self.disconnect_button.setMinimumWidth(
-            120
-        )
+        self.disconnect_button.setMinimumHeight(40)
+        self.disconnect_button.setMinimumWidth(120)
 
         self.disconnect_button.setCursor(
             Qt.CursorShape.PointingHandCursor
         )
 
-        self.disconnect_button.setEnabled(
-            False
-        )
+        self.disconnect_button.setEnabled(False)
 
         self.disconnect_button.clicked.connect(
             self.disconnect_device
@@ -495,9 +498,7 @@ class DevicesPage(QWidget):
             self.disconnect_button
         )
 
-        layout.addLayout(
-            actions
-        )
+        layout.addLayout(actions)
 
         return card
 
@@ -509,9 +510,7 @@ class DevicesPage(QWidget):
     ):
         card = QFrame()
 
-        card.setObjectName(
-            "stat_card"
-        )
+        card.setObjectName("stat_card")
 
         card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -529,29 +528,16 @@ class DevicesPage(QWidget):
 
         card_layout.setSpacing(5)
 
-        label = QLabel(
-            label_text
-        )
+        label = QLabel(label_text)
+        label.setObjectName("stat_label")
 
-        label.setObjectName(
-            "stat_label"
-        )
-
-        value = QLabel(
-            value_text
-        )
-
-        value.setObjectName(
-            "stat_value"
-        )
+        value = QLabel(value_text)
+        value.setObjectName("stat_value")
 
         card_layout.addWidget(label)
         card_layout.addWidget(value)
 
-        parent_layout.addWidget(
-            card,
-            1,
-        )
+        parent_layout.addWidget(card, 1)
 
         return value
 
@@ -561,49 +547,98 @@ class DevicesPage(QWidget):
         text,
     ):
         label = QLabel(text)
+        label.setObjectName("metadata_label")
 
-        label.setObjectName(
-            "metadata_label"
-        )
-
-        parent_layout.addWidget(
-            label
-        )
+        parent_layout.addWidget(label)
 
         return label
 
-    # ============================================================
-    # BLE CONNECTION
-    # ============================================================
+    # ========================================================
+    # BLE SERVICE
+    # ========================================================
 
     def set_ble_service(
         self,
         ble_service,
     ):
+        """
+        Attach the application BLE integration service.
+
+        The BLE service owns the actual BLE worker/thread.
+        This page only reacts to its signals and requests actions.
+        """
+
         self.ble_service = ble_service
 
         if self.ble_service is None:
+            self.set_scan_status(
+                "BLE service is unavailable.",
+                error=True,
+            )
+
+            self.disconnect_button.setEnabled(False)
             return
 
-        self.ble_service.status_changed.connect(
-            self.handle_ble_status
+        self._connect_service_signal(
+            "status_changed",
+            self.handle_ble_status,
         )
 
-        self.ble_service.telemetry_received.connect(
-            self.handle_telemetry
+        self._connect_service_signal(
+            "telemetry_received",
+            self.handle_telemetry,
         )
 
-        self.ble_service.error_occurred.connect(
-            self.handle_ble_error
+        self._connect_service_signal(
+            "error_occurred",
+            self.handle_ble_error,
         )
 
-        self.ble_service.devices_discovered.connect(
-            self.handle_devices_discovered
+        self._connect_service_signal(
+            "devices_discovered",
+            self.handle_devices_discovered,
         )
 
         self.load_devices()
 
+    def _connect_service_signal(
+        self,
+        signal_name,
+        callback,
+    ):
+        """
+        Safely connect a BLE service signal.
+
+        This prevents the UI from crashing if an optional signal
+        is not exposed by a particular service implementation.
+        """
+
+        signal = getattr(
+            self.ble_service,
+            signal_name,
+            None,
+        )
+
+        if signal is None:
+            return
+
+        try:
+            signal.connect(callback)
+        except (AttributeError, TypeError):
+            pass
+
+    # ========================================================
+    # BLE SCANNING
+    # ========================================================
+
     def scan_devices(self):
+        """
+        Start a user-requested BLE scan.
+
+        There is intentionally no automatic scan when the page
+        or application starts.
+        """
+
         if self.ble_service is None:
             self.set_scan_status(
                 "BLE service is unavailable.",
@@ -611,33 +646,59 @@ class DevicesPage(QWidget):
             )
             return
 
-        self.scan_button.setEnabled(
-            False
-        )
+        if self.is_scanning:
+            return
 
-        self.scan_button.setText(
-            "Scanning..."
-        )
+        self.is_scanning = True
+
+        self.scan_button.setEnabled(False)
+        self.scan_button.setText("Scanning...")
+
+        self.clear_nearby_devices()
 
         self.set_scan_status(
-            "Scanning nearby Bluetooth devices..."
+            "Scanning for nearby Bluetooth devices..."
         )
 
-        self.ble_service.scan_devices()
+        try:
+            self.ble_service.scan_devices()
+
+        except Exception as exc:
+            self.is_scanning = False
+
+            self.scan_button.setEnabled(True)
+            self.scan_button.setText(
+                "↻  Scan for Devices"
+            )
+
+            self.set_scan_status(
+                "Unable to start Bluetooth scan.",
+                error=True,
+            )
+
+            print(
+                f"[DEVICES] Scan error: {exc}"
+            )
 
     def handle_devices_discovered(
         self,
         devices,
     ):
-        self.clear_nearby_devices()
+        """
+        Display every BLE device returned by the BLE service.
 
-        self.scan_button.setEnabled(
-            True
-        )
+        No filtering is performed here. HealthSync compatibility
+        is determined by the BLE backend/service discovery process.
+        """
 
+        self.is_scanning = False
+
+        self.scan_button.setEnabled(True)
         self.scan_button.setText(
             "↻  Scan for Devices"
         )
+
+        self.clear_nearby_devices()
 
         if not devices:
             self.set_scan_status(
@@ -650,19 +711,36 @@ class DevicesPage(QWidget):
         )
 
         for device in devices:
-            self.add_nearby_device(
-                device
-            )
+            self.add_nearby_device(device)
+
+    # ========================================================
+    # NEARBY DEVICE CARD
+    # ========================================================
 
     def add_nearby_device(
         self,
         device,
     ):
-        card = QFrame()
+        """
+        Add one discovered BLE device to the nearby list.
+        """
 
-        card.setObjectName(
-            "nearby_device_card"
+        if not isinstance(device, dict):
+            return
+
+        device_name = (
+            device.get("name")
+            or "Unknown Bluetooth Device"
         )
+
+        device_address = (
+            device.get("address")
+            or device.get("id")
+            or "--"
+        )
+
+        card = QFrame()
+        card.setObjectName("nearby_device_card")
 
         card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -680,95 +758,43 @@ class DevicesPage(QWidget):
 
         layout.setSpacing(15)
 
-        # --------------------------------------------------------
-        # Device icon
-        # --------------------------------------------------------
-
         icon = QLabel("◉")
-
-        icon.setObjectName(
-            "device_icon"
-        )
-
+        icon.setObjectName("device_icon")
         icon.setFixedWidth(30)
 
-        layout.addWidget(
-            icon
-        )
-
-        # --------------------------------------------------------
-        # Device information
-        # --------------------------------------------------------
+        layout.addWidget(icon)
 
         information = QVBoxLayout()
-
         information.setSpacing(4)
 
-        name = QLabel(
-            device["name"]
-        )
+        name = QLabel(device_name)
+        name.setObjectName("nearby_device_name")
 
-        name.setObjectName(
-            "nearby_device_name"
-        )
-
-        address = QLabel(
-            device["address"]
-        )
-
+        address = QLabel(device_address)
         address.setObjectName(
             "nearby_device_address"
         )
 
-        information.addWidget(
-            name
-        )
+        information.addWidget(name)
+        information.addWidget(address)
 
-        information.addWidget(
-            address
-        )
-
-        layout.addLayout(
-            information
-        )
-
+        layout.addLayout(information)
         layout.addStretch()
 
-        # --------------------------------------------------------
-        # Device type
-        # --------------------------------------------------------
-
-        type_label = QLabel(
-            "Bluetooth LE"
-        )
-
+        type_label = QLabel("Bluetooth LE")
         type_label.setObjectName(
             "device_type_badge"
         )
 
-        layout.addWidget(
-            type_label
-        )
+        layout.addWidget(type_label)
 
-        # --------------------------------------------------------
-        # Connect button
-        # --------------------------------------------------------
-
-        connect_button = QPushButton(
-            "Connect"
-        )
-
+        connect_button = QPushButton("Connect")
         connect_button.setObjectName(
             "connect_button"
         )
 
-        connect_button.setMinimumHeight(
-            38
-        )
-
-        connect_button.setMinimumWidth(
-            105
-        )
+        connect_button.setMinimumHeight(38)
+        connect_button.setMinimumWidth(105)
 
         connect_button.setCursor(
             Qt.CursorShape.PointingHandCursor
@@ -776,107 +802,377 @@ class DevicesPage(QWidget):
 
         connect_button.clicked.connect(
             lambda checked=False,
-            address=device["address"]:
-            self.connect_to_device(
-                address
-            )
+            address=device_address:
+            self.connect_to_device(address)
         )
 
-        layout.addWidget(
-            connect_button
-        )
+        layout.addWidget(connect_button)
 
-        self.nearby_devices_container.addWidget(
-            card
-        )
+        self.nearby_devices_container.addWidget(card)
+
+    # ========================================================
+    # BLE CONNECTION ACTIONS
+    # ========================================================
 
     def connect_to_device(
         self,
         device_address: str,
     ):
+        """
+        Request a connection to the selected BLE device.
+
+        The BLE backend decides whether the device exposes the
+        HealthSync A001 service.
+        """
+
         if self.ble_service is None:
+            self.set_scan_status(
+                "BLE service is unavailable.",
+                error=True,
+            )
             return
+
+        if not device_address or device_address == "--":
+            self.set_scan_status(
+                "Selected Bluetooth device has no valid address.",
+                error=True,
+            )
+            return
+
+        self.current_device_address = device_address
+        self.is_connecting = True
+
+        self.set_connection_state("CONNECTING")
 
         self.set_scan_status(
-            "Connecting to selected device..."
+            "Connecting to selected Bluetooth device..."
         )
 
-        self.ble_service.connect_device(
-            device_address
-        )
+        try:
+            self.ble_service.connect_device(
+                device_address
+            )
+
+        except Exception as exc:
+            self.is_connecting = False
+
+            self.set_connection_state(
+                "DISCONNECTED"
+            )
+
+            self.set_scan_status(
+                "Unable to connect to the selected device.",
+                error=True,
+            )
+
+            print(
+                f"[DEVICES] Connection error: {exc}"
+            )
 
     def disconnect_device(self):
+        """
+        Request a manual BLE disconnect.
+        """
+
         if self.ble_service is None:
             return
 
-        self.ble_service.stop()
+        self.is_connecting = False
 
-    # ============================================================
-    # BLE EVENTS
-    # ============================================================
+        self.set_scan_status(
+            "Disconnecting from Bluetooth device..."
+        )
+
+        try:
+            self.ble_service.disconnect_device()
+
+        except Exception as exc:
+            self.set_scan_status(
+                "Unable to disconnect from the Bluetooth device.",
+                error=True,
+            )
+
+            print(
+                f"[DEVICES] Disconnect error: {exc}"
+            )
+
+    # ========================================================
+    # BLE STATUS EVENTS
+    # ========================================================
 
     def handle_ble_status(
         self,
         status: str,
     ):
-        status_lower = status.lower()
+        """
+        React to BLE integration state messages.
+        """
 
-        if "scan complete" in status_lower:
-            self.scan_button.setEnabled(
-                True
+        if status is None:
+            return
+
+        status_text = str(status).strip()
+
+        if not status_text:
+            return
+
+        status_lower = status_text.lower()
+
+        # ----------------------------------------------------
+        # Scan state
+        # ----------------------------------------------------
+
+        if (
+            "scanning" in status_lower
+            and "complete" not in status_lower
+        ):
+            self.is_scanning = True
+
+            self.scan_button.setEnabled(False)
+            self.scan_button.setText(
+                "Scanning..."
             )
 
+            self.set_scan_status(status_text)
+            return
+
+        if (
+            "scan complete" in status_lower
+            or "scan completed" in status_lower
+        ):
+            self.is_scanning = False
+
+            self.scan_button.setEnabled(True)
             self.scan_button.setText(
                 "↻  Scan for Devices"
             )
 
-        self.set_scan_status(
-            status
-        )
+            self.set_scan_status(status_text)
+            return
 
-        if (
-            "connected" in status_lower
-            or "disconnected" in status_lower
-        ):
-            self.load_devices()
+        # ----------------------------------------------------
+        # Connecting
+        # ----------------------------------------------------
 
-    def handle_telemetry(
-        self,
-        telemetry,
-    ):
-        if self.current_device_id is None:
+        if "connecting" in status_lower:
+            self.is_connecting = True
+
+            self.set_connection_state(
+                "CONNECTING"
+            )
+
+            self.set_scan_status(status_text)
+            return
+
+        # ----------------------------------------------------
+        # Reconnecting
+        # ----------------------------------------------------
+
+        if "reconnecting" in status_lower:
+            self.is_connecting = True
+
+            self.set_connection_state(
+                "RECONNECTING"
+            )
+
+            self.set_scan_status(status_text)
+            return
+
+        # ----------------------------------------------------
+        # Connected
+        # ----------------------------------------------------
+
+        if "connected" in status_lower:
+            self.is_connecting = False
+
+            self.set_connection_state(
+                "CONNECTED"
+            )
+
+            self.set_scan_status(status_text)
+
             self.load_devices()
             return
 
-        if telemetry.battery is not None:
-            self.battery_value.setText(
-                f"{telemetry.battery}%"
+        # ----------------------------------------------------
+        # Disconnected
+        # ----------------------------------------------------
+
+        if "disconnected" in status_lower:
+            self.is_connecting = False
+
+            self.set_connection_state(
+                "DISCONNECTED"
             )
 
-        self.updated_value.setText(
-            "Just now"
-        )
+            self.set_scan_status(status_text)
+
+            self.load_devices()
+            return
+
+        # ----------------------------------------------------
+        # Failed / error
+        # ----------------------------------------------------
+
+        if (
+            "failed" in status_lower
+            or "error" in status_lower
+            or "unable" in status_lower
+        ):
+            self.is_connecting = False
+
+            self.set_connection_state(
+                "DISCONNECTED"
+            )
+
+            self.set_scan_status(
+                status_text,
+                error=True,
+            )
+            return
+
+        self.set_scan_status(status_text)
+
+    def set_connection_state(
+        self,
+        state: str,
+    ):
+        """
+        Update the connected-device card based on BLE state.
+        """
+
+        state_upper = str(state).upper()
+
+        if state_upper == "CONNECTED":
+            self.connection_status.setText(
+                "●  CONNECTED"
+            )
+
+            self.connection_status.setObjectName(
+                "status_connected"
+            )
+
+            self.disconnect_button.setEnabled(
+                self.ble_service is not None
+            )
+
+            self.refresh_widget_style(
+                self.connection_status
+            )
+
+            return
+
+        if state_upper == "CONNECTING":
+            self.connection_status.setText(
+                "●  CONNECTING"
+            )
+
+            self.connection_status.setObjectName(
+                "status_connecting"
+            )
+
+            self.disconnect_button.setEnabled(False)
+
+            self.refresh_widget_style(
+                self.connection_status
+            )
+
+            return
+
+        if state_upper == "RECONNECTING":
+            self.connection_status.setText(
+                "●  RECONNECTING"
+            )
+
+            self.connection_status.setObjectName(
+                "status_reconnecting"
+            )
+
+            self.disconnect_button.setEnabled(False)
+
+            self.refresh_widget_style(
+                self.connection_status
+            )
+
+            return
 
         self.connection_status.setText(
-            "●  CONNECTED"
+            "●  DISCONNECTED"
         )
 
         self.connection_status.setObjectName(
-            "status_connected"
+            "status_disconnected"
         )
+
+        self.disconnect_button.setEnabled(False)
 
         self.refresh_widget_style(
             self.connection_status
         )
 
+    # ========================================================
+    # TELEMETRY EVENTS
+    # ========================================================
+
+    def handle_telemetry(
+        self,
+        telemetry,
+    ):
+        """
+        React to a valid telemetry snapshot.
+
+        No synthetic values are generated.
+        """
+
+        self.telemetry_received_at = datetime.now()
+
+        battery = getattr(
+            telemetry,
+            "battery",
+            None,
+        )
+
+        if battery is not None:
+            self.battery_value.setText(
+                f"{battery}%"
+            )
+
+        self.telemetry_status.setText(
+            "●  LIVE DATA RECEIVING"
+        )
+
+        self.telemetry_status.setObjectName(
+            "telemetry_live"
+        )
+
+        self.telemetry_detail.setText(
+            "Telemetry data is being received from the connected device."
+        )
+
+        self.refresh_widget_style(
+            self.telemetry_status
+        )
+
+        self.updated_value.setText(
+            "Just now"
+        )
+
+        self.set_connection_state(
+            "CONNECTED"
+        )
+
+    # ========================================================
+    # BLE ERRORS
+    # ========================================================
+
     def handle_ble_error(
         self,
         error: str,
     ):
-        self.scan_button.setEnabled(
-            True
-        )
+        self.is_scanning = False
+        self.is_connecting = False
 
+        self.scan_button.setEnabled(True)
         self.scan_button.setText(
             "↻  Scan for Devices"
         )
@@ -890,11 +1186,19 @@ class DevicesPage(QWidget):
             f"[DEVICES] BLE Error: {error}"
         )
 
-    # ============================================================
+    # ========================================================
     # DATABASE
-    # ============================================================
+    # ========================================================
 
     def load_devices(self):
+        """
+        Load only devices belonging to the authenticated user.
+
+        Existing user isolation is preserved:
+
+            WHERE user_id = ?
+        """
+
         connection = get_connection()
 
         try:
@@ -940,9 +1244,7 @@ class DevicesPage(QWidget):
             self.show_no_connected_device()
 
         for row in rows:
-            self.add_saved_device(
-                row
-            )
+            self.add_saved_device(row)
 
     def show_connected_device(
         self,
@@ -950,16 +1252,12 @@ class DevicesPage(QWidget):
     ):
         self.current_device_id = row["id"]
 
-        self.connection_status.setText(
-            "●  CONNECTED"
+        self.current_device_address = (
+            row["device_address"]
         )
 
-        self.connection_status.setObjectName(
-            "status_connected"
-        )
-
-        self.refresh_widget_style(
-            self.connection_status
+        self.set_connection_state(
+            "CONNECTED"
         )
 
         self.device_name.setText(
@@ -997,31 +1295,35 @@ class DevicesPage(QWidget):
         )
 
         if battery is None:
-            self.battery_value.setText(
-                "--"
-            )
+            self.battery_value.setText("--")
         else:
             self.battery_value.setText(
                 f"{battery}%"
             )
 
-        self.disconnect_button.setEnabled(
-            self.ble_service is not None
-        )
+        if self.telemetry_received_at is None:
+            self.telemetry_status.setText(
+                "○  WAITING FOR DATA"
+            )
+
+            self.telemetry_status.setObjectName(
+                "telemetry_waiting"
+            )
+
+            self.telemetry_detail.setText(
+                "Connected successfully. Waiting for telemetry..."
+            )
+
+            self.refresh_widget_style(
+                self.telemetry_status
+            )
 
     def show_no_connected_device(self):
         self.current_device_id = None
+        self.current_device_address = None
 
-        self.connection_status.setText(
-            "●  DISCONNECTED"
-        )
-
-        self.connection_status.setObjectName(
-            "status_disconnected"
-        )
-
-        self.refresh_widget_style(
-            self.connection_status
+        self.set_connection_state(
+            "DISCONNECTED"
         )
 
         self.device_name.setText(
@@ -1032,17 +1334,9 @@ class DevicesPage(QWidget):
             "Waiting for a HealthSync device..."
         )
 
-        self.battery_value.setText(
-            "--"
-        )
-
-        self.updated_value.setText(
-            "--"
-        )
-
-        self.connection_value.setText(
-            "Bluetooth LE"
-        )
+        self.battery_value.setText("--")
+        self.updated_value.setText("--")
+        self.connection_value.setText("Bluetooth LE")
 
         self.device_id_value.setText(
             "Device ID: --"
@@ -1056,9 +1350,23 @@ class DevicesPage(QWidget):
             "Source: BLE"
         )
 
-        self.disconnect_button.setEnabled(
-            False
+        self.telemetry_status.setText(
+            "○  WAITING FOR DATA"
         )
+
+        self.telemetry_status.setObjectName(
+            "telemetry_waiting"
+        )
+
+        self.telemetry_detail.setText(
+            "Connect a HealthSync-compatible device to receive telemetry."
+        )
+
+        self.refresh_widget_style(
+            self.telemetry_status
+        )
+
+        self.telemetry_received_at = None
 
     def get_latest_battery(
         self,
@@ -1086,9 +1394,9 @@ class DevicesPage(QWidget):
         finally:
             connection.close()
 
-    # ============================================================
+    # ========================================================
     # SAVED DEVICES
-    # ============================================================
+    # ========================================================
 
     def add_saved_device(
         self,
@@ -1109,20 +1417,18 @@ class DevicesPage(QWidget):
             14,
         )
 
-        icon = QLabel("◉")
+        layout.setSpacing(10)
 
+        icon = QLabel("◉")
         icon.setObjectName(
             "saved_device_icon"
         )
 
         icon.setFixedWidth(30)
 
-        layout.addWidget(
-            icon
-        )
+        layout.addWidget(icon)
 
         information = QVBoxLayout()
-
         information.setSpacing(4)
 
         name = QLabel(
@@ -1142,47 +1448,50 @@ class DevicesPage(QWidget):
             "saved_device_details"
         )
 
-        information.addWidget(
-            name
-        )
+        information.addWidget(name)
+        information.addWidget(details)
 
-        information.addWidget(
-            details
-        )
-
-        layout.addLayout(
-            information
-        )
-
+        layout.addLayout(information)
         layout.addStretch()
 
-        status = QLabel(
-            row["status"]
-        )
+        status_text = row["status"] or "UNKNOWN"
+
+        status = QLabel(status_text)
 
         status.setObjectName(
-            "saved_device_status"
+            self.get_saved_status_object_name(
+                status_text
+            )
         )
 
-        layout.addWidget(
-            status
-        )
+        layout.addWidget(status)
 
-        self.saved_devices_container.addWidget(
-            card
-        )
+        self.saved_devices_container.addWidget(card)
 
-    # ============================================================
+    @staticmethod
+    def get_saved_status_object_name(
+        status: str,
+    ) -> str:
+        status_upper = str(status).upper()
+
+        if status_upper == "CONNECTED":
+            return "saved_device_status"
+
+        if status_upper == "RECONNECTING":
+            return "saved_device_status_reconnecting"
+
+        if status_upper == "CONNECTING":
+            return "saved_device_status_connecting"
+
+        return "saved_device_status_disconnected"
+
+    # ========================================================
     # HELPERS
-    # ============================================================
+    # ========================================================
 
     def clear_nearby_devices(self):
         while self.nearby_devices_container.count():
-            item = (
-                self.nearby_devices_container.takeAt(
-                    0
-                )
-            )
+            item = self.nearby_devices_container.takeAt(0)
 
             widget = item.widget()
 
@@ -1191,11 +1500,7 @@ class DevicesPage(QWidget):
 
     def clear_saved_devices(self):
         while self.saved_devices_container.count():
-            item = (
-                self.saved_devices_container.takeAt(
-                    0
-                )
-            )
+            item = self.saved_devices_container.takeAt(0)
 
             widget = item.widget()
 
@@ -1207,13 +1512,9 @@ class DevicesPage(QWidget):
         text,
         error=False,
     ):
-        self.scan_status.setText(
-            text
-        )
+        self.scan_status.setText(str(text))
 
-        self.scan_indicator.setText(
-            "●"
-        )
+        self.scan_indicator.setText("●")
 
         if error:
             self.scan_indicator.setObjectName(
@@ -1274,9 +1575,9 @@ class DevicesPage(QWidget):
 
         return str(value)
 
-    # ============================================================
+    # ========================================================
     # PAGE STYLING
-    # ============================================================
+    # ========================================================
 
     def apply_page_styles(self):
         self.setStyleSheet(
@@ -1349,6 +1650,18 @@ class DevicesPage(QWidget):
 
             #status_disconnected {
                 color: #90A8B8;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            #status_connecting {
+                color: #90C2E7;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            #status_reconnecting {
+                color: #F2C14E;
                 font-size: 12px;
                 font-weight: 700;
             }
@@ -1499,6 +1812,36 @@ class DevicesPage(QWidget):
                 color: #FFFFFF;
             }
 
+            #telemetry_status_card {
+                background: #091A26;
+                border: 1px solid #173044;
+                border-radius: 10px;
+            }
+
+            #telemetry_heading {
+                color: #648398;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1px;
+            }
+
+            #telemetry_live {
+                color: #39D98A;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            #telemetry_waiting {
+                color: #90A8B8;
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            #telemetry_detail {
+                color: #6F95AA;
+                font-size: 11px;
+            }
+
             #saved_device_card {
                 background: #091A26;
                 border: 1px solid #173044;
@@ -1524,6 +1867,33 @@ class DevicesPage(QWidget):
             #saved_device_status {
                 color: #39D98A;
                 background: #102C25;
+                border-radius: 7px;
+                padding: 6px 10px;
+                font-size: 10px;
+                font-weight: 700;
+            }
+
+            #saved_device_status_connecting {
+                color: #90C2E7;
+                background: #102D3D;
+                border-radius: 7px;
+                padding: 6px 10px;
+                font-size: 10px;
+                font-weight: 700;
+            }
+
+            #saved_device_status_reconnecting {
+                color: #F2C14E;
+                background: #302A17;
+                border-radius: 7px;
+                padding: 6px 10px;
+                font-size: 10px;
+                font-weight: 700;
+            }
+
+            #saved_device_status_disconnected {
+                color: #90A8B8;
+                background: #17242D;
                 border-radius: 7px;
                 padding: 6px 10px;
                 font-size: 10px;
